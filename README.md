@@ -1,19 +1,18 @@
 # WAFFLE
   Web Application Firewall For Limited Exploitation
 
-
-INSTALLATION
+### INSTALLATION
 
 Simply Upload the waffle.php in your preferable directory.
 
-Open php.ini
+Open `php.ini`
 
 Find 
 
-auto_prepend_file = 
+`auto_prepend_file =`
 
 Replace With
 
-auto_prepend_file = /your/directory/waffle.php
+`auto_prepend_file = /your/directory/waffle.php`
 
-Restart Apache2 OR PHP-FPM and you are done!
+<b>Restart Apache2 OR PHP-FPM and you are done!</b>
