@@ -2,7 +2,7 @@
 
 define( 'WAF_NAME', 'WAFFLE' );
 define( 'CACHE_DIR', '/tmp/' );
-##############################################################################################################################################
+########################################################################################
 define( 'MAX_INPUT_QUERY_STRING', 255 );
 define( 'ONLY_HTTPS', false );
 define( 'MAX_INPUT_ELEMENTS', 30 );
@@ -23,6 +23,7 @@ define( 'FLOOD_LIMIT', 60 );
 define( 'FREQUENCY_SECONDS', 2 );
 define( 'MAX_MINUTES_BAN', 10 );
 
+########################################################################################
 $bad_functions = array(
     'shell_exec',
     'passthru',
@@ -51,7 +52,6 @@ $proxy_headers = array(
 $allowed_methods = array( 'GET', 'POST' );
 $command_injection = "\;.*|\|.*|" . PHP_EOL . '.*';
 $sql = "[\x22\x27](\s)*(or|and)(\s).*(\s)*\x3d|cmd=ls|cmd%3Dls|(drop|alter|create|truncate).*(index|table|database)|insert(\s).*(into|member.|value.)|(select|union|order).*(select|union|order)|0x[0-9a-f][0-9a-f]|sleep\(|\-\-|\/\*|\/\/|benchmark\([0-9]+,[a-z]+|eval\(.*\(.*|update.*set.*=|delete.*from";
-##############################################################################################################################################
 
 $user_ip = $_SERVER['REMOTE_ADDR'];
 
