@@ -6,7 +6,7 @@ E-mail: acerockson@hotmail.com
 
 ### INSTALLATION
 
-Simply Upload the waffle.php in your preferable directory.
+Simply Upload the waffle.php & config.ini in your preferable directory.
 
 Open `php.ini`
 
