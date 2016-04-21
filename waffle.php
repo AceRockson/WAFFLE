@@ -80,37 +80,46 @@ foreach ( $bad_functions as $bad_func )
     }
 }
 
-$WAF_array = array(
-    '_GET' => &$_GET,
-    '_POST' => &$_POST,
-    '_REQUEST' => &$_REQUEST );
+if ( empty( $_COOKIE ) )
+    $_COOKIE = array();
 
-foreach ( $WAF_array as $global_v => $elements )
+if ( empty( $_SESSION ) )
+    $_SESSION = array();
+
+$exclude_keys = array(
+    '__utmz',
+    '__utma',
+    '__cfduid',
+    '_ga' );
+
+$WAF_array = array(
+    &$_GET,
+    &$_POST,
+    &$_COOKIE,
+    &$_SESSION,
+    array( file_get_contents( 'php://input' ) ) );
+
+
+$_SERVER['HTTP_USER_AGENT'] = $_SERVER['HTTP_REFERER'] = 'WAFFLE PROTECTION';
+
+
+foreach ( $WAF_array as $key => $array )
 {
-    if ( count( $elements ) > $config['input']['max_input_elements'] )
+    if ( count( $array ) > $config['input']['max_input_elements'] )
         attack_found( "MAX INPUT VARS ON $global_v  ARRAY REACHED!" );
 
-    foreach ( $$global_v as $k => $v )
+
+    foreach ( array_merge( array_keys( $array ), array_values( $array ) ) as $k => $v )
     {
-        $v = urldecode( $v );
+        if ( in_array( $k, $exclude_keys, true ) )
+        {
+            continue;
+        }
 
-        if ( $config['input']['max_strlen_var'] != 0 && strlen( $v ) > $config['input']['max_strlen_var'] )
-            attack_found( "MAX INPUT ON VAR ($k) -> $global_v ARRAY REACHED!" );
+        /* Values to Check */
+        $values_check = array( $v, base64_decode( $v, true ) );
 
-        if ( $config['protections']['null_byte_protection'] && stristr( $v, '\0' ) )
-            attack_found( 'NULL BYTE' );
-
-        if ( $config['protections']['enable_command_injection_protection'] )
-            if ( preg_match( "/^.*(" . implode( '|', $config['rules']['command_injection'] ) . ").*/i", $v, $matched ) )
-                attack_found( "COMMAND INJECTION: " . $matched[1] );
-
-        if ( $config['protections']['enable_sqli_protection'] )
-            if ( preg_match( "/^.*(" . implode( '|', $config['rules']['sqli'] ) . ").*/i", $v, $matched ) )
-                attack_found( "SQL INJECTION: " . $matched[1] );
-
-        if ( $config['protections']['enable_xss_protection'] )
-            if ( preg_match( "/^.*(" . implode( '|', $config['rules']['xss'] ) . ").*/i", $v, $matched ) )
-                attack_found( "XSS: " . $matched[1] );
+        array_walk_recursive( $values_check, 'AnalyzeInput' );
     }
 }
 
@@ -118,4 +127,31 @@ function attack_found( $match )
 {
     file_put_contents( CACHE_DIR . 'attacks.txt', "[WARNING] Possible Attack Found & Eliminated (  =>  '" . str_replace( "\n", "\\n", $match ) . "'  <=  ) @ " . date( "F j, Y, g:i a" ) . "\n", FILE_APPEND );
     exit( 'Hacking Attempt Detected & Eliminated' );
+}
+
+function AnalyzeInput( $input )
+{
+    global $config;
+
+    $input = urldecode( $input );
+
+
+    if ( $config['input']['max_strlen_var'] != 0 && strlen( $input ) > $config['input']['max_strlen_var'] )
+        attack_found( "MAX INPUT ON VAR REACHED!" );
+
+    if ( $config['protections']['null_byte_protection'] && stristr( $input, '\0' ) )
+        attack_found( 'NULL BYTE' );
+
+    if ( $config['protections']['enable_command_injection_protection'] && !empty( $config['rules']['command_injection'] ) )
+        if ( preg_match( "/^.*(" . implode( '|', $config['rules']['command_injection'] ) . ").*/i", $input, $matched ) )
+            attack_found( "COMMAND INJECTION: " . $matched[1] );
+
+    if ( $config['protections']['enable_sqli_protection'] && !empty( $config['rules']['sqli'] ) )
+        if ( preg_match( "/^.*(" . implode( '|', $config['rules']['sqli'] ) . ").*/i", $input, $matched ) )
+            attack_found( "SQL INJECTION: " . $matched[1] );
+
+    if ( $config['protections']['enable_xss_protection'] & !empty( $config['rules']['xss'] ) )
+        if ( preg_match( "/^.*(" . implode( '|', $config['rules']['xss'] ) . ").*/i", $input, $matched ) )
+            attack_found( "XSS: " . $matched[1] );
+
 }
