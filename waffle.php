@@ -13,6 +13,50 @@ $user_ip = $_SERVER['REMOTE_ADDR'];
 $query_string = urldecode( $_SERVER['QUERY_STRING'] );
 
 
+if ( $config['brute_force']['protect_brute'] )
+{
+    $user_file = CACHE_DIR . $user_ip;
+
+    if ( file_exists( $user_file ) )
+    {
+        $flood_row = json_decode( file_get_contents( $user_file ), true );
+
+        if ( $flood_row['banned'] && time() - $flood_row['banned_time'] <= $config['brute_force']['banned_time'] * 60 )
+        {
+            http_response_code( 404 );
+            exit;
+        }
+
+        if ( time() - $flood_row['last_request'] <= $config['brute_force']['frequency'] )
+        {
+            ++$flood_row['requests'];
+            if ( $flood_row['requests'] >= $config['brute_force']['requests_limit'] )
+            {
+                $flood_row['banned'] = true;
+                $flood_row['banned_time'] = time();
+            }
+            $flood_row['last_request'] = time();
+            file_put_contents( $user_file, json_encode( $flood_row ), LOCK_EX );
+        }
+        else
+        {
+            $flood_row['requests'] = 0;
+            $flood_row['banned'] = false;
+            $flood_row['banned_time'] = 0;
+            $flood_row['last_request'] = time();
+            file_put_contents( $user_file, json_encode( $flood_row ), LOCK_EX );
+        }
+    }
+    else
+        file_put_contents( $user_file, json_encode( array(
+            'banned_time' => 0,
+            'banned' => false,
+            'requests' => 0,
+            'last_request' => time() ) ), LOCK_EX );
+}
+
+
+
 if ( $config['protections']['user_agent_protection'] )
 {
     if ( $config['user_agents']['block_empty_ua'] && empty( $_SERVER['HTTP_USER_AGENT'] ) )
