@@ -7,13 +7,20 @@ session_start();
 
 $allowed_methods = array_map( 'trim', explode( ',', $config['input']['allowed_methods'] ) );
 $proxies_headers = ( $config['proxies']['proxies_protection'] ) ? array_map( 'trim', explode( ',', $config['proxies']['proxies_headers'] ) ) : array();
-$bad_functions = ( $config['bad_funcs']['bad_func_enable'] ) ? array_map( 'trim', explode( ',', $config['bad_funcs']['bad_functions'] ) ) : array();
 
 $user_ip = $_SERVER['REMOTE_ADDR'];
 $query_string = urldecode( $_SERVER['QUERY_STRING'] );
 
+if ( $config['resources']['cpu_loadavg_protect'] )
+{
+    if ( get_server_load() >= $config['resources']['cpu_loadavg_limit'] )
+    {
+        echo $config['resources']['message_exit'];
+        exit;
+    }
+}
 
-if ( $config['brute_force']['protect_brute'] )
+if ( $config['ddos']['protect_ddos'] )
 {
     $user_file = CACHE_DIR . $user_ip;
 
@@ -21,19 +28,18 @@ if ( $config['brute_force']['protect_brute'] )
     {
         $flood_row = json_decode( file_get_contents( $user_file ), true );
 
-        if ( $flood_row['banned'] && time() - $flood_row['banned_time'] <= $config['brute_force']['banned_time'] * 60 )
+        if ( $flood_row['banned'] )
         {
-            http_response_code( 404 );
+            shell_exec( "sudo /sbin/iptables -A INPUT -s $user_ip -j DROP" );
             exit;
         }
 
-        if ( time() - $flood_row['last_request'] <= $config['brute_force']['frequency'] )
+        if ( time() - $flood_row['last_request'] <= $config['ddos']['frequency'] )
         {
             ++$flood_row['requests'];
-            if ( $flood_row['requests'] >= $config['brute_force']['requests_limit'] )
+            if ( $flood_row['requests'] >= $config['ddos']['requests_limit'] )
             {
                 $flood_row['banned'] = true;
-                $flood_row['banned_time'] = time();
             }
             $flood_row['last_request'] = time();
             file_put_contents( $user_file, json_encode( $flood_row ), LOCK_EX );
@@ -42,19 +48,16 @@ if ( $config['brute_force']['protect_brute'] )
         {
             $flood_row['requests'] = 0;
             $flood_row['banned'] = false;
-            $flood_row['banned_time'] = 0;
             $flood_row['last_request'] = time();
             file_put_contents( $user_file, json_encode( $flood_row ), LOCK_EX );
         }
     }
     else
         file_put_contents( $user_file, json_encode( array(
-            'banned_time' => 0,
             'banned' => false,
             'requests' => 0,
             'last_request' => time() ) ), LOCK_EX );
 }
-
 
 
 if ( $config['protections']['user_agent_protection'] )
@@ -154,14 +157,6 @@ if ( $config['protections']['lfi_protection'] && ( stristr( $query_string, '/' )
 if ( $config['protections']['rfi_protection'] && stristr( $query_string, 'http' ) )
     attack_found( "RFI ATTEMPT PREVENTED" );
 
-foreach ( $bad_functions as $bad_func )
-{
-    if ( function_exists( $bad_func ) && is_callable( $bad_func ) )
-    {
-        exit( "Function <b>$bad_func</b> is enabled. WAFFLE can't run with these functions enabled as it is a security risk. Request terminated!" );
-    }
-}
-
 if ( empty( $_COOKIE ) )
     $_COOKIE = array();
 
@@ -208,6 +203,43 @@ foreach ( $WAF_array as $key => $array )
 
         array_walk_recursive( $values_check, 'AnalyzeInput' );
     }
+}
+
+/*
+Get CPU Load Average on Linux/Windows
+Warning: On Windows might take some time
+*/
+
+function get_server_load()
+{
+    if ( stristr( PHP_OS, 'win' ) )
+    {
+
+        $wmi = new COM( "Winmgmts://" );
+        $server = $wmi->execquery( "SELECT LoadPercentage FROM Win32_Processor" );
+
+        $cpu_num = 0;
+        $load_total = 0;
+
+        foreach ( $server as $cpu )
+        {
+            $cpu_num++;
+            $load_total += $cpu->loadpercentage;
+        }
+
+        $load = round( $load_total / $cpu_num );
+
+    }
+    else
+    {
+
+        $sys_load = sys_getloadavg();
+        $load = $sys_load[0];
+
+    }
+
+    return ( int )$load;
+
 }
 
 function attack_found( $match )
