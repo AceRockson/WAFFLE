@@ -2,6 +2,9 @@
 
 $config = parse_ini_file( "config.ini", true ) or die( 'Config.ini Parse Fail' );
 define( 'CACHE_DIR', $config['main']['cache_dir'] );
+
+session_start();
+
 $allowed_methods = array_map( 'trim', explode( ',', $config['input']['allowed_methods'] ) );
 $proxies_headers = ( $config['proxies']['proxies_protection'] ) ? array_map( 'trim', explode( ',', $config['proxies']['proxies_headers'] ) ) : array();
 $bad_functions = ( $config['bad_funcs']['bad_func_enable'] ) ? array_map( 'trim', explode( ',', $config['bad_funcs']['bad_functions'] ) ) : array();
@@ -64,6 +67,41 @@ if ( $config['https']['use_only_https'] && $_SERVER['REQUEST_SCHEME'] != 'https'
     attack_found( "NO HTTPS SCHEME FOUND" );
 }
 
+
+/* Protect Files/Folders With Extra Password */
+if ( $config['protect_files']['enable_file_protection'] && !empty( $_SERVER['SCRIPT_NAME'] ) && stristr( $_SERVER['SCRIPT_NAME'], '/' ) )
+{
+    $auth = false;
+    if ( isset( $_SERVER['PHP_AUTH_USER'] ) )
+    {
+        $username = @$_SERVER['PHP_AUTH_USER'];
+        $password = @$_SERVER['PHP_AUTH_PW'];
+
+        if ( $username == $config['protect_files']['username'] && $password == $config['protect_files']['password'] )
+        {
+            $auth = true;
+        }
+    }
+
+    if ( !$auth )
+    {
+        $files = explode( '/', $_SERVER['SCRIPT_NAME'] );
+
+        foreach ( $files as $file )
+        {
+            $file = pathinfo( $file )['filename'];
+
+            if ( preg_match( "/^\b(" . $config['protect_files']['files'] . ")\b/i", $file, $matched ) )
+            {
+                header( 'WWW-Authenticate: Basic realm="WAFFLE Protection"' );
+                header( 'HTTP/1.0 401 Unauthorized' );
+                exit;
+            }
+        }
+    }
+
+}
+
 /* Local File Inclusion Protection */
 if ( $config['protections']['lfi_protection'] && ( stristr( $query_string, '/' ) or stristr( $query_string, '\\' ) ) )
     attack_found( "LFI ATTEMPT PREVENTED" );
@@ -106,10 +144,10 @@ $_SERVER['HTTP_USER_AGENT'] = $_SERVER['HTTP_REFERER'] = 'WAFFLE PROTECTION';
 foreach ( $WAF_array as $key => $array )
 {
     if ( count( $array ) > $config['input']['max_input_elements'] )
-        attack_found( "MAX INPUT VARS ON $global_v  ARRAY REACHED!" );
+        attack_found( "MAX INPUT VARS ON $key ARRAY REACHED!" );
 
 
-    foreach ( array_merge( array_keys( $array ), array_values( $array ) ) as $k => $v )
+    foreach ( $array as $k => $v )
     {
         if ( in_array( $k, $exclude_keys, true ) )
         {
@@ -117,7 +155,12 @@ foreach ( $WAF_array as $key => $array )
         }
 
         /* Values to Check */
-        $values_check = array( $v, base64_decode( $v, true ) );
+        $values_check = array(
+            $v,
+            $k,
+            base64_decode( $k, true ),
+            base64_decode( $v, true ) );
+
 
         array_walk_recursive( $values_check, 'AnalyzeInput' );
     }
@@ -135,6 +178,10 @@ function AnalyzeInput( $input )
 
     $input = urldecode( $input );
 
+    if ( empty( $input ) )
+    {
+        return;
+    }
 
     if ( $config['input']['max_strlen_var'] != 0 && strlen( $input ) > $config['input']['max_strlen_var'] )
         attack_found( "MAX INPUT ON VAR REACHED!" );
