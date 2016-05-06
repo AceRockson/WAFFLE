@@ -1,6 +1,6 @@
 # WAFFLE
 
-WAFFLE stands for Web Application Firewall For Limited Exploitation and is an open source Web Application Firewall(WAF) still under development that provides maximum security against common web threats like XSS Attacks,SQL Injections,Command Injections e.t.c. 
+WAFFLE stands for Web Application Firewall For Limited Exploitation and is **a simple but powerful** WAF still under development that provides maximum security against common web threats like XSS Attacks,SQL Injections,Command Injections e.t.c. 
 
 It also provides some extra security features that will be clearly analyzed in the documentation that will be provided in the next few weeks. 
 
