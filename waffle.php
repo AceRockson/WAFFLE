@@ -60,7 +60,7 @@ if ( $config['ddos']['protect_ddos'] )
 }
 
 
-if ( $config['protections']['user_agent_protection'] )
+if ( $config['user_agents']['user_agent_protection'] )
 {
     if ( $config['user_agents']['block_empty_ua'] && empty( $_SERVER['HTTP_USER_AGENT'] ) )
         attack_found( "EMPTY USER AGENT" );
@@ -149,13 +149,6 @@ if ( $config['protect_files']['enable_file_protection'] && !empty( $_SERVER['SCR
 
 }
 
-/* Local File Inclusion Protection */
-if ( $config['protections']['lfi_protection'] && ( stristr( $query_string, '/' ) or stristr( $query_string, '\\' ) ) )
-    attack_found( "LFI ATTEMPT PREVENTED" );
-
-/* Remote File Inclusion Protection */
-if ( $config['protections']['rfi_protection'] && stristr( $query_string, 'http' ) )
-    attack_found( "RFI ATTEMPT PREVENTED" );
 
 if ( empty( $_COOKIE ) )
     $_COOKIE = array();
@@ -170,15 +163,13 @@ $exclude_keys = array(
     '_ga' );
 
 $WAF_array = array(
-    &$_GET,
-    &$_POST,
-    &$_COOKIE,
-    &$_SESSION,
-    array( file_get_contents( 'php://input' ) ) );
-
-
-$_SERVER['HTTP_USER_AGENT'] = $_SERVER['HTTP_REFERER'] = 'WAFFLE PROTECTION';
-
+    '_GET' => &$_GET,
+    '_POST' => &$_POST,
+    '_REQUEST' => &$_REQUEST,
+    '_COOKIE' => &$_COOKIE,
+    '_SESSION' => &$_SESSION,
+    '_SERVER' => array( 'HTTP_USER_AGENT' => &$_SERVER['HTTP_USER_AGENT'], 'HTTP_REFERER' => &$_SERVER['HTTP_REFERER'] ),
+    'HTTP_RAW_POST_DATA' => array( file_get_contents( 'php://input' ) ) );
 
 foreach ( $WAF_array as $key => $array )
 {
@@ -193,15 +184,15 @@ foreach ( $WAF_array as $key => $array )
             continue;
         }
 
-        /* Values to Check */
-        $values_check = array(
-            $v,
-            $k,
-            base64_decode( $k, true ),
-            base64_decode( $v, true ) );
+        if ( $config['input']['max_strlen_var'] != 0 && strlen( $v ) > $config['input']['max_strlen_var'] )
+            attack_found( "MAX INPUT ON VAR REACHED!" );
 
 
-        array_walk_recursive( $values_check, 'AnalyzeInput' );
+        if ( !IsBase64( $v ) )
+            ${$key}[SanitizeNClean( $k )] = SanitizeNClean( $v );
+        else
+            ${$key}[SanitizeNClean( $k )] = base64_encode( SanitizeNClean( base64_decode( $v ) ) );
+
     }
 }
 
@@ -209,7 +200,6 @@ foreach ( $WAF_array as $key => $array )
 Get CPU Load Average on Linux/Windows
 Warning: On Windows might take some time
 */
-
 function get_server_load()
 {
     if ( stristr( PHP_OS, 'win' ) )
@@ -244,37 +234,41 @@ function get_server_load()
 
 function attack_found( $match )
 {
-    file_put_contents( CACHE_DIR . 'attacks.txt', "[WARNING] Possible Attack Found & Eliminated (  =>  '" . str_replace( "\n", "\\n", $match ) . "'  <=  ) @ " . date( "F j, Y, g:i a" ) . "\n", FILE_APPEND );
+    file_put_contents( CACHE_DIR . 'attacks.txt', "[WARNING] Possible Threat Found (  =>  '" . str_replace( "\n", "\\n", $match ) . "'  <=  ) @ " . date( "F j, Y, g:i a" ) . "\n", FILE_APPEND );
     exit( 'Hacking Attempt Detected & Eliminated' );
 }
 
-function AnalyzeInput( $input )
+function SanitizeNClean( $string )
 {
-    global $config;
+    return htmlentities( str_replace( array(
+        '(',
+        ')',
+        '=',
+        ',',
+        '|',
+        '$',
+        '`',
+        '/',
+        '\\' ), array(
+        '&#40;',
+        '&#41;',
+        '&#61;',
+        '&#44;',
+        '&#124;',
+        '&#36;',
+        '&#96;',
+        '&#47;',
+        '&#92;' ), urldecode( $string ) ), ENT_QUOTES | ENT_HTML401 | ENT_SUBSTITUTE, ini_get( "default_charset" ), false );
+}
 
-    $input = urldecode( $input );
+function IsBase64( $string )
+{
+    $d = base64_decode( $string, true );
+    return ( !empty( $d ) ) ? isAscii( $d ) : false;
 
-    if ( empty( $input ) )
-    {
-        return;
-    }
+}
 
-    if ( $config['input']['max_strlen_var'] != 0 && strlen( $input ) > $config['input']['max_strlen_var'] )
-        attack_found( "MAX INPUT ON VAR REACHED!" );
-
-    if ( $config['protections']['null_byte_protection'] && stristr( $input, '\0' ) )
-        attack_found( 'NULL BYTE' );
-
-    if ( $config['protections']['enable_command_injection_protection'] && !empty( $config['rules']['command_injection'] ) )
-        if ( preg_match( "/^.*(" . implode( '|', $config['rules']['command_injection'] ) . ").*/i", $input, $matched ) )
-            attack_found( "COMMAND INJECTION: " . $matched[1] );
-
-    if ( $config['protections']['enable_sqli_protection'] && !empty( $config['rules']['sqli'] ) )
-        if ( preg_match( "/^.*(" . implode( '|', $config['rules']['sqli'] ) . ").*/i", $input, $matched ) )
-            attack_found( "SQL INJECTION: " . $matched[1] );
-
-    if ( $config['protections']['enable_xss_protection'] & !empty( $config['rules']['xss'] ) )
-        if ( preg_match( "/^.*(" . implode( '|', $config['rules']['xss'] ) . ").*/i", $input, $matched ) )
-            attack_found( "XSS: " . $matched[1] );
-
+function isAscii( $str )
+{
+    return preg_match( '/^([\x00-\x7F])*$/', $str );
 }
