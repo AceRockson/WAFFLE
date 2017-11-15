@@ -29,7 +29,7 @@ WAFFLE Differs from other Open Source WAFs, because it doesn't have a rule-set a
 #### Features / Protections Against
 
   * SQL Injection
-  * XSS (Dom,reflected)
+  * XSS 
   * LFI/RFI
   * Command Injections
   * TOR Exit Nodes
